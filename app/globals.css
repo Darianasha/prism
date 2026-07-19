@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+::selection {
+  background: rgba(96, 165, 250, 0.3);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #131722 25%, #1b2130 50%, #131722 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}

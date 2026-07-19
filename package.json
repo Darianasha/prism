@@ -1,0 +1,41 @@
+{
+  "name": "visual-chat-agent",
+  "version": "1.0.0",
+  "description": "Prism — a chat agent whose answers are interactive visuals (Trigger.dev + ClickHouse)",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "trigger:dev": "npx trigger.dev@latest dev",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:seed": "tsx scripts/seed.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.16",
+    "@ai-sdk/google": "^4.0.18",
+    "@ai-sdk/openai": "^4.0.16",
+    "@ai-sdk/otel": "^1.0.31",
+    "@ai-sdk/react": "^4.0.34",
+    "@clickhouse/client": "^1.23.1",
+    "@trigger.dev/sdk": "^4.5.4",
+    "ai": "^7.0.31",
+    "echarts": "^6.1.0",
+    "next": "^16.2.10",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@trigger.dev/build": "^4.5.4",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "playwright": "^1.61.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3"
+  }
+}
