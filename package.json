@@ -10,7 +10,8 @@
     "trigger:dev": "npx trigger.dev@latest dev",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "db:app": "tsx scripts/app-schema.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.16",

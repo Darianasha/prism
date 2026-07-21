@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { useTriggerChatTransport, type InferChatUIMessage } from "@trigger.dev/sdk/chat/react";
 import type { prismAgent } from "@/trigger/agent";
 import type { RenderOutput } from "@/lib/spec";
 import { ComponentRenderer } from "./canvas/ComponentRenderer";
-import { mintChatAccessToken, startChatSession } from "../../app/actions";
+import {
+  mintChatAccessToken,
+  startChatSession,
+  setSessionTitle,
+  saveTranscript,
+} from "../../app/actions";
 
 type Msg = InferChatUIMessage<typeof prismAgent>;
 type Part = Msg["parts"][number];
@@ -38,53 +44,75 @@ function activeProfile(messages: Msg[]): Profile | null {
   return latest;
 }
 
-export function Chat() {
-  // Client-only mount gate: the chat id lives in the URL (?chat=...) so a
-  // mid-stream refresh reconnects to the same durable session.
-  const [chatId, setChatId] = useState<string | null>(null);
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    let id = url.searchParams.get("chat");
-    if (!id) {
-      id = crypto.randomUUID().slice(0, 8);
-      url.searchParams.set("chat", id);
-      window.history.replaceState({}, "", url);
-    }
-    setChatId(id);
-  }, []);
+export function Chat({
+  chatId,
+  initialMessages,
+}: {
+  chatId: string;
+  initialMessages: Msg[];
+}) {
+  // chatId + transcript come from the server (page.tsx reads ?chat= and loads
+  // the stored messages). The transport/useChat hooks are client-only, so gate
+  // ChatSession behind a mount flag — rendering it during SSR crashes the
+  // transport hook. Keying on chatId remounts the session on navigation.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (!chatId) return null;
-  return <ChatSession key={chatId} chatId={chatId} />;
+  if (!mounted) return null;
+  return <ChatSession key={chatId} chatId={chatId} initialMessages={initialMessages} />;
 }
 
-function ChatSession({ chatId }: { chatId: string }) {
+function ChatSession({
+  chatId,
+  initialMessages,
+}: {
+  chatId: string;
+  initialMessages: Msg[];
+}) {
   const transport = useTriggerChatTransport<typeof prismAgent>({
     task: "prism",
     accessToken: ({ chatId }) => mintChatAccessToken(chatId),
     startSession: ({ chatId, clientData }) => startChatSession({ chatId, clientData }),
   });
 
-  const { messages, sendMessage, stop, status } = useChat<Msg>({ id: chatId, transport });
+  const { messages, sendMessage, stop, status } = useChat<Msg>({
+    id: chatId,
+    messages: initialMessages,
+    transport,
+    resume: initialMessages.length > 0,
+  });
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const savedRef = useRef<string>("");
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, status]);
 
+  // Snapshot the transcript to ClickHouse once each turn settles, so reopening
+  // the session rehydrates it. Skip if unchanged since the last save.
+  useEffect(() => {
+    if (status !== "ready" || messages.length === 0) return;
+    const json = JSON.stringify(messages);
+    if (json === savedRef.current) return;
+    savedRef.current = json;
+    void saveTranscript(chatId, json);
+  }, [status, messages, chatId]);
+
   const busy = status === "submitted" || status === "streaming";
+
+  const router = useRouter();
 
   const send = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
+    const isFirst = messages.length === 0;
     void sendMessage({ text: trimmed });
     setInput("");
-  };
-
-  const newChat = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("chat", crypto.randomUUID().slice(0, 8));
-    window.location.href = url.toString();
+    if (isFirst) {
+      // Name the session from its first message and refresh the sidebar list.
+      void setSessionTitle(chatId, trimmed).then(() => router.refresh());
+    }
   };
 
   return (
@@ -106,12 +134,6 @@ function ChatSession({ chatId }: { chatId: string }) {
               )
             }
           />
-          <button
-            onClick={newChat}
-            className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-300 transition hover:bg-slate-800"
-          >
-            New chat
-          </button>
         </div>
       </header>
 
