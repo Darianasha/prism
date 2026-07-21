@@ -1,5 +1,7 @@
 import { assertIdent, createTable, insertRows } from "./clickhouse";
 import type { Row } from "./spec";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 
 export interface IngestResult {
   table: string;
@@ -95,7 +97,7 @@ export async function ingestUrl(opts: {
   format?: "csv" | "json" | "auto";
 }): Promise<IngestResult> {
   const table = assertIdent(opts.table);
-  const res = await fetch(opts.url, { redirect: "follow" });
+  const res = await safeFetch(opts.url);
   if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
   const text = await res.text();
   if (text.length > MAX_BYTES) throw new Error("File too large (>20MB)");
@@ -232,4 +234,84 @@ async function getJson(url: string): Promise<Record<string, unknown>> {
 
 function num(v: unknown): number | null {
   return v == null ? null : Number(v);
+}
+
+const FETCH_MAX_BYTES = 2 * 1024 * 1024; // 2 MB of HTML is plenty to read
+const FETCH_MAX_CHARS = 8_000;           // chars handed to the model
+
+export async function fetchReadable(
+  url: string
+): Promise<{ url: string; title: string; text: string; truncated: boolean }> {
+  const res = await safeFetch(url);
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+  const ct = res.headers.get("content-type") ?? "";
+  if (!/text\/html|text\/plain|application\/(json|xhtml)/.test(ct)) {
+    throw new Error(`Unsupported content-type: ${ct}`);
+  }
+  const raw = (await res.text()).slice(0, FETCH_MAX_BYTES);
+  const title = /<title[^>]*>([^<]*)<\/title>/i.exec(raw)?.[1]?.trim() ?? url;
+  const text = htmlToText(raw);
+  const body = text.slice(0, FETCH_MAX_CHARS);
+  const fenced = `<untrusted_web_content source="${res.url}">\n${body}\n</untrusted_web_content>`;
+  return { url: res.url, title, text: fenced, truncated: text.length > FETCH_MAX_CHARS };
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Only allow public http(s) targets. Rejects loopback/private/link-local hosts and
+// cloud metadata endpoints BEFORE any network call. Fails closed on anything odd.
+export async function assertPublicUrl(raw: string): Promise<URL> {
+  let u: URL;
+  try { u = new URL(raw); } catch { throw new Error(`Invalid URL: ${raw}`); }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new Error(`Only http(s) URLs are allowed (got ${u.protocol})`);
+  }
+  const host = u.hostname.replace(/^\[|\]$/g, "");           // strip IPv6 brackets
+  const ip = isIP(host) ? host : (await lookup(host)).address; // resolve DNS names
+  if (isPrivateIp(ip)) {
+    throw new Error(`Refusing to fetch an internal address: ${host} -> ${ip}`);
+  }
+  return u;
+}
+
+function isPrivateIp(ip: string): boolean {
+  if (isIP(ip) === 6) {
+    const v = ip.toLowerCase();
+    if (v.startsWith("::ffff:")) return isPrivateIp(v.slice(7));  // IPv4-mapped
+    return v === "::1" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80");
+  }
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some(Number.isNaN)) return true;        // fail closed
+  const [a, b] = p;
+  return (
+    a === 0 || a === 10 || a === 127 ||
+    (a === 169 && b === 254) ||            // link-local incl. 169.254.169.254 metadata
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127) ||  // CGNAT
+    a >= 224                               // multicast / reserved
+  );
+}
+
+async function safeFetch(url: string, maxRedirects = 3): Promise<Response> {
+  let current = url;
+  for (let i = 0; i <= maxRedirects; i++) {
+    const target = await assertPublicUrl(current);
+    const res = await fetch(target, { redirect: "manual", signal: AbortSignal.timeout(15_000) });
+    const loc = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && loc) {
+      current = new URL(loc, target).toString();
+      continue;
+    }
+    return res;
+  }
+  throw new Error("Too many redirects");
 }
