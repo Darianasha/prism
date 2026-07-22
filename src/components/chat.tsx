@@ -265,6 +265,27 @@ function PartView({
     case "tool-list_datasets":
       return <ToolChip done={part.state === "output-available"} label="Inspecting datasets" />;
 
+    case "tool-web_search": {
+      const done = part.state === "output-available" || part.state === "output-error";
+      const sources = part.state === "output-available" ? extractSources(part.output) : [];
+      return (
+        <div className="space-y-1.5">
+          <ToolChip done={done} label="Searching the web" />
+          {sources.length > 0 && <SourceLinks sources={sources} />}
+        </div>
+      );
+    }
+
+    case "tool-web_fetch": {
+      const done = part.state === "output-available" || part.state === "output-error";
+      const out = done ? (part.output as { ok?: boolean; url?: string } | undefined) : null;
+      let host: string | undefined;
+      try {
+        if (out?.url) host = new URL(out.url).hostname.replace(/^www\./, "");
+      } catch {}
+      return <ToolChip done={done} label={host ? `Reading ${host}` : "Reading a page"} />;
+    }
+
     case "tool-run_query": {
       const done = part.state === "output-available" || part.state === "output-error";
       const sql =
@@ -272,7 +293,7 @@ function PartView({
       return (
         <details className="group">
           <summary className="cursor-pointer list-none">
-            <ToolChip done={done} label="Querying ClickHouse" expandable />
+            <ToolChip done={done} label="Analyzing the data" expandable />
           </summary>
           {sql && (
             <pre className="mt-2 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">
@@ -291,8 +312,8 @@ function PartView({
           done={done}
           label={
             out?.ok
-              ? `Fetched ${out.rowCount?.toLocaleString()} rows into “${out.table}”`
-              : "Fetching external data"
+              ? `Pulled in ${out.rowCount?.toLocaleString()} fresh rows`
+              : "Fetching fresh data"
           }
         />
       );
@@ -400,6 +421,51 @@ function ToolChip({
       {label}
       {expandable && <span className="text-slate-600">· sql</span>}
     </span>
+  );
+}
+
+type Source = { url: string; domain: string };
+
+/**
+ * Pull the real source URLs out of a web_search tool result. The provider
+ * returns { sources: [{ type: "url", url }] } (sometimes wrapped in { value }).
+ * Dedupe by domain so we show distinct sites, not every result.
+ */
+function extractSources(output: unknown): Source[] {
+  const o = output as { sources?: unknown; value?: { sources?: unknown } } | undefined;
+  const raw = (o?.sources ?? o?.value?.sources) as { url?: string }[] | undefined;
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: Source[] = [];
+  for (const s of raw) {
+    if (!s?.url) continue;
+    try {
+      const domain = new URL(s.url).hostname.replace(/^www\./, "");
+      if (seen.has(domain)) continue;
+      seen.add(domain);
+      out.push({ url: s.url, domain });
+    } catch {}
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+
+function SourceLinks({ sources }: { sources: Source[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 pl-1">
+      <span className="text-[10px] uppercase tracking-wide text-slate-600">sources</span>
+      {sources.map((s) => (
+        <a
+          key={s.url}
+          href={s.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-900/50 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-sky-600/50 hover:text-sky-300"
+        >
+          ↗ {s.domain}
+        </a>
+      ))}
+    </div>
   );
 }
 

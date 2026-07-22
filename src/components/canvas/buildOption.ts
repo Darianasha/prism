@@ -1,6 +1,16 @@
 import type { EChartsOption, SeriesOption } from "echarts";
 import type { RenderOutput, Row, Annotation } from "@/lib/spec";
-import { SEVERITY_COLORS, SERIES_COLORS, isDateLike, toTimeValue, formatValue } from "./format";
+import {
+  SEVERITY_COLORS,
+  SERIES_COLORS,
+  isDateLike,
+  toTimeValue,
+  formatValue,
+  barGradient,
+  areaGradient,
+} from "./format";
+
+const FONT_FAMILY = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 
 // Turns a RenderOutput (spec + rows) into an ECharts option. Defensive: the
 // model sometimes omits encoding fields, so every accessor falls back to
@@ -34,25 +44,44 @@ function resolveColumns(out: RenderOutput): Resolved {
 }
 
 const AXIS = {
-  axisLine: { lineStyle: { color: "#2a3346" } },
-  axisTick: { lineStyle: { color: "#2a3346" } },
+  axisLine: { show: false },
+  axisTick: { show: false },
   axisLabel: { color: "#8b98b8", fontSize: 11 },
-  splitLine: { lineStyle: { color: "#161c2a" } },
+  splitLine: { lineStyle: { color: "#1a2233", type: "dashed" as const, width: 1 } },
 };
 
-function baseOption(hasLegend: boolean): EChartsOption {
+const TOOLTIP = {
+  backgroundColor: "rgba(15,20,33,0.94)",
+  borderColor: "#2a3346",
+  borderWidth: 1,
+  padding: [8, 12] as [number, number],
+  textStyle: { color: "#dbe4f5", fontSize: 12 },
+  extraCssText: "border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.45);",
+};
+
+function baseOption(hasLegend: boolean, shadowPointer = false): EChartsOption {
   return {
     backgroundColor: "transparent",
-    animationDuration: 400,
-    grid: { left: 56, right: 20, top: hasLegend ? 40 : 20, bottom: 36 },
+    animationDuration: 500,
+    animationEasing: "cubicOut",
+    textStyle: { fontFamily: FONT_FAMILY },
+    grid: { left: 56, right: 22, top: hasLegend ? 44 : 22, bottom: 36 },
     tooltip: {
       trigger: "axis",
-      backgroundColor: "#111726",
-      borderColor: "#2a3346",
-      textStyle: { color: "#dbe4f5", fontSize: 12 },
+      ...TOOLTIP,
+      axisPointer: shadowPointer
+        ? { type: "shadow", shadowStyle: { color: "rgba(148,163,184,0.07)" } }
+        : { type: "line", lineStyle: { color: "#334155", type: "dashed", width: 1 } },
     },
     legend: hasLegend
-      ? { top: 0, textStyle: { color: "#8b98b8", fontSize: 11 }, icon: "circle", itemWidth: 8 }
+      ? {
+          top: 4,
+          textStyle: { color: "#94a3b8", fontSize: 11 },
+          icon: "roundRect",
+          itemWidth: 11,
+          itemHeight: 4,
+          itemGap: 16,
+        }
       : undefined,
   };
 }
@@ -126,41 +155,75 @@ export function buildOption(out: RenderOutput): BuiltChart {
 
 function cartesian(out: RenderOutput): BuiltChart {
   const { spec, rows } = out;
-  const { x, ys, series } = resolveColumns(out);
+  const cols = resolveColumns(out);
+  const { x, ys } = cols;
+  // A "series" that's identical to the category axis is redundant — it splits
+  // each category into empty grouped slots (thin bars + a pointless legend).
+  // Collapse it to a single full-width series.
+  const series = cols.series && cols.series !== x ? cols.series : undefined;
   const isBar = spec.component === "bar";
   const isTime = !isBar && isDateLike(rows[0]?.[x]);
   const variant = spec.variant;
   const stacked = variant === "stacked-bar";
   const horizontal = variant === "horizontal-bar";
 
-  const mkSeries = (name: string, data: [string | number, unknown][]): SeriesOption =>
-    ({
+  // Value labels read well on small categorical comparisons (e.g. two teams'
+  // stats); they'd clutter a dense time series, so only show them when sparse.
+  const seriesCount = series ? new Set(rows.map((r) => String(r[series]))).size : ys.length;
+  const showBarLabels = isBar && rows.length * Math.max(seriesCount, 1) <= 24;
+
+  const mkSeries = (name: string, data: [string | number, unknown][], idx: number): SeriesOption => {
+    const color = SERIES_COLORS[idx % SERIES_COLORS.length];
+    const radius = horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0];
+    return {
       name,
       type: isBar ? "bar" : "line",
       stack: stacked ? "total" : undefined,
       showSymbol: false,
+      symbolSize: 7,
       smooth: false,
-      lineStyle: { width: 2 },
-      areaStyle: variant === "area" ? { opacity: 0.14 } : undefined,
-      barMaxWidth: 28,
-      emphasis: { focus: "series" },
+      lineStyle: isBar ? undefined : { width: 2.5, color },
+      itemStyle: isBar
+        ? { color: barGradient(color), borderRadius: stacked ? 0 : radius }
+        : { color },
+      areaStyle:
+        variant === "area" ? { color: areaGradient(color), opacity: 1 } : undefined,
+      barMaxWidth: 46,
+      barCategoryGap: "42%",
+      emphasis: { focus: "series", scale: false },
+      label: showBarLabels
+        ? {
+            show: true,
+            position: stacked ? "inside" : horizontal ? "right" : "top",
+            color: "#cbd5e1",
+            fontSize: 11,
+            fontWeight: 600,
+            formatter: (p: { value: unknown }) => {
+              const v = Array.isArray(p.value) ? p.value[horizontal ? 0 : 1] : p.value;
+              return formatValue(v, spec.encoding);
+            },
+          }
+        : undefined,
       data: horizontal ? data.map(([a, b]) => [b, a]) : data,
-    }) as SeriesOption;
+    } as SeriesOption;
+  };
 
   let seriesList: SeriesOption[];
   if (series) {
     const yCol = ys[0];
-    seriesList = [...groupBy(rows, series)].map(([name, group]) =>
+    seriesList = [...groupBy(rows, series)].map(([name, group], i) =>
       mkSeries(
         name,
-        group.map((r) => [isTime ? toTimeValue(r[x]) : String(r[x]), r[yCol]])
+        group.map((r) => [isTime ? toTimeValue(r[x]) : String(r[x]), r[yCol]]),
+        i
       )
     );
   } else {
-    seriesList = ys.map((yCol) =>
+    seriesList = ys.map((yCol, i) =>
       mkSeries(
         yCol,
-        rows.map((r) => [isTime ? toTimeValue(r[x]) : String(r[x]), r[yCol]])
+        rows.map((r) => [isTime ? toTimeValue(r[x]) : String(r[x]), r[yCol]]),
+        i
       )
     );
   }
@@ -199,19 +262,23 @@ function cartesian(out: RenderOutput): BuiltChart {
     : {
         type: "category" as const,
         ...AXIS,
+        splitLine: { show: false },
         axisLabel: { ...AXIS.axisLabel, hideOverlap: true },
       };
 
-  return {
-    option: {
-      ...baseOption(seriesList.length > 1),
-      color: SERIES_COLORS,
-      xAxis: horizontal ? valueAxis : catAxis,
-      yAxis: horizontal ? { type: "category", ...AXIS, inverse: true } : valueAxis,
-      series: seriesList,
-    },
-    height: 300,
+  const option: EChartsOption = {
+    ...baseOption(seriesList.length > 1, isBar),
+    color: SERIES_COLORS,
+    xAxis: horizontal ? valueAxis : catAxis,
+    yAxis: horizontal ? { type: "category", ...AXIS, splitLine: { show: false }, inverse: true } : valueAxis,
+    series: seriesList,
   };
+  // Horizontal value labels sit to the RIGHT of each bar; widen the right
+  // margin so the longest ("40M USD") isn't clipped at the container edge.
+  if (horizontal && showBarLabels) {
+    option.grid = { ...(option.grid as Record<string, unknown>), right: 88 };
+  }
+  return { option, height: 300 };
 }
 
 /** One mini-chart per series, stacked, sharing the x axis + crosshair. */
@@ -221,23 +288,23 @@ function smallMultiples(
   isTime: boolean
 ): BuiltChart {
   const n = seriesList.length;
-  const topPad = 3;
+  const topPad = 4;
   const bottomPad = 9;
-  const gap = 7;
+  const gap = 9;
   const h = (100 - topPad - bottomPad - gap * (n - 1)) / n;
 
   return {
     option: {
       backgroundColor: "transparent",
-      animationDuration: 400,
+      animationDuration: 500,
+      animationEasing: "cubicOut",
+      textStyle: { fontFamily: FONT_FAMILY },
       color: SERIES_COLORS,
-      tooltip: {
-        trigger: "axis",
-        backgroundColor: "#111726",
-        borderColor: "#2a3346",
-        textStyle: { color: "#dbe4f5", fontSize: 12 },
+      tooltip: { trigger: "axis", ...TOOLTIP },
+      axisPointer: {
+        link: [{ xAxisIndex: "all" }],
+        lineStyle: { color: "#475569", type: "dashed", width: 1 },
       },
-      axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: "#475569" } },
       grid: seriesList.map((_, i) => ({
         left: 56,
         right: 20,
@@ -260,25 +327,30 @@ function smallMultiples(
         nameTextStyle: {
           color: SERIES_COLORS[i % SERIES_COLORS.length],
           fontSize: 11,
+          fontWeight: 600 as const,
           align: "left" as const,
           padding: [0, 0, 0, -40],
         },
         nameGap: 10,
         ...AXIS,
+        // the metric name sits at the top; hide the top tick label so they don't collide
+        axisLabel: { ...AXIS.axisLabel, showMaxLabel: false },
       })),
-      series: seriesList.map(
-        (s, i) =>
-          ({
-            ...s,
-            xAxisIndex: i,
-            yAxisIndex: i,
-            areaStyle: { opacity: 0.1 },
-            // deploy/incident annotations repeat on every strip
-            ...marks,
-          }) as SeriesOption
-      ),
+      series: seriesList.map((s, i) => {
+        const color = SERIES_COLORS[i % SERIES_COLORS.length];
+        return {
+          ...s,
+          xAxisIndex: i,
+          yAxisIndex: i,
+          lineStyle: { width: 2.5, color },
+          itemStyle: { color },
+          areaStyle: { color: areaGradient(color), opacity: 1 },
+          // deploy/incident annotations repeat on every strip
+          ...marks,
+        } as SeriesOption;
+      }),
     },
-    height: Math.max(110 * n + 50, 260),
+    height: Math.max(82 * n + 42, 230),
   };
 }
 
@@ -326,15 +398,17 @@ function heatmap(out: RenderOutput): EChartsOption {
       bottom: 0,
       itemHeight: 120,
       textStyle: { color: "#8b98b8", fontSize: 10 },
-      inRange: { color: ["#101828", "#1d4ed8", "#f59e0b", "#ef4444"] },
+      inRange: { color: ["#0f1729", "#1e3a8a", "#7c3aed", "#f59e0b", "#ef4444"] },
     },
     series: [
       {
         type: "heatmap",
         data,
         label: { show: false },
-        itemStyle: { borderColor: "#0a0c12", borderWidth: 1 },
-        emphasis: { itemStyle: { borderColor: "#e2e8f0" } },
+        itemStyle: { borderColor: "#0a0c12", borderWidth: 3, borderRadius: 4 },
+        emphasis: {
+          itemStyle: { borderColor: "#e2e8f0", shadowBlur: 8, shadowColor: "rgba(0,0,0,0.4)" },
+        },
       },
     ],
   };
@@ -356,8 +430,9 @@ function scatter(out: RenderOutput): EChartsOption {
       symbolSize: value
         ? (v: unknown, p: { dataIndex: number }) =>
             6 + 24 * Math.sqrt(Number(group[p.dataIndex][value]) / maxSize)
-        : 8,
-      itemStyle: { opacity: 0.75 },
+        : 9,
+      itemStyle: { opacity: 0.8, borderColor: "rgba(255,255,255,0.18)", borderWidth: 1 },
+      emphasis: { itemStyle: { opacity: 1, shadowBlur: 10, shadowColor: "rgba(0,0,0,0.5)" } },
     }) as SeriesOption;
 
   const seriesList = series

@@ -18,6 +18,44 @@ export const SERIES_COLORS = [
   "#4ade80",
 ];
 
+/** hex + alpha (0..1) -> 8-digit hex, e.g. withAlpha("#60a5fa", 0.5). */
+export function withAlpha(hex: string, alpha: number): string {
+  const a = Math.round(Math.max(0, Math.min(1, alpha)) * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return hex + a;
+}
+
+/** Top-to-bottom fill for bars: saturated at the cap, softer at the base. */
+export function barGradient(color: string): object {
+  return {
+    type: "linear",
+    x: 0,
+    y: 0,
+    x2: 0,
+    y2: 1,
+    colorStops: [
+      { offset: 0, color: withAlpha(color, 1) },
+      { offset: 1, color: withAlpha(color, 0.5) },
+    ],
+  };
+}
+
+/** Line-chart area wash that fades to nothing. */
+export function areaGradient(color: string): object {
+  return {
+    type: "linear",
+    x: 0,
+    y: 0,
+    x2: 0,
+    y2: 1,
+    colorStops: [
+      { offset: 0, color: withAlpha(color, 0.28) },
+      { offset: 1, color: withAlpha(color, 0.01) },
+    ],
+  };
+}
+
 export function formatValue(v: unknown, encoding?: Encoding): string {
   const n = Number(v);
   if (v == null || Number.isNaN(n)) return String(v ?? "—");

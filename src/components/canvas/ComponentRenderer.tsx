@@ -13,6 +13,17 @@ const STATUS_TINT: Record<string, string> = {
   neutral: "border-slate-700/60",
 };
 
+/**
+ * The user should never see raw ClickHouse table names dressed up as a "source".
+ * Drop subtitles that cite an internal dataset/table; keep real ones (web domains).
+ */
+function cleanSubtitle(s?: string): string | undefined {
+  if (!s) return undefined;
+  if (/\b(internal|warehouse)\b/i.test(s) && /\b(dataset|table|source)\b/i.test(s)) return undefined;
+  if (/source:\s*[a-z0-9]+_[a-z0-9_]+/i.test(s)) return undefined; // snake_case table-looking source
+  return s;
+}
+
 export function ComponentRenderer({ output }: { output: RenderOutput }) {
   if (!output.ok) {
     // The agent sees the error and retries on its own — keep the failure quiet.
@@ -40,13 +51,14 @@ export function ComponentRenderer({ output }: { output: RenderOutput }) {
 
   const { spec } = output;
   const tint = STATUS_TINT[spec.status ?? "neutral"] ?? STATUS_TINT.neutral;
+  const subtitle = cleanSubtitle(spec.subtitle);
 
   return (
     <div className={`rounded-xl border ${tint} bg-[#0e1220]/90 p-4 shadow-lg shadow-black/20`}>
       <div className="mb-1 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-[15px] font-semibold leading-snug text-slate-100">{spec.title}</h3>
-          {spec.subtitle && <p className="mt-0.5 text-xs text-slate-400">{spec.subtitle}</p>}
+          {subtitle && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
         </div>
         {output.truncated && (
           <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
