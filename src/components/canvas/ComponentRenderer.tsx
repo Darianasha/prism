@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, useState, useTransition, type RefObject } from "react";
 import type { RenderOutput, Row } from "@/lib/spec";
 import { buildOption } from "./buildOption";
-import { EChart } from "./EChart";
+import { EChart, type EChartHandle } from "./EChart";
 import { formatValue, SEVERITY_COLORS } from "./format";
+import { addChartToDashboard } from "../../../app/dashboard-actions";
+import { rowsToCsv, slugFilename, downloadBlob, downloadDataUrl } from "@/lib/export";
 
 const STATUS_TINT: Record<string, string> = {
   good: "border-emerald-500/30",
@@ -24,7 +26,14 @@ function cleanSubtitle(s?: string): string | undefined {
   return s;
 }
 
-export function ComponentRenderer({ output }: { output: RenderOutput }) {
+export function ComponentRenderer({
+  output,
+  canSave = false,
+}: {
+  output: RenderOutput;
+  canSave?: boolean;
+}) {
+  const chartRef = useRef<EChartHandle>(null);
   if (!output.ok) {
     // The agent sees the error and retries on its own — keep the failure quiet.
     return (
@@ -52,6 +61,7 @@ export function ComponentRenderer({ output }: { output: RenderOutput }) {
   const { spec } = output;
   const tint = STATUS_TINT[spec.status ?? "neutral"] ?? STATUS_TINT.neutral;
   const subtitle = cleanSubtitle(spec.subtitle);
+  const hasChart = spec.component !== "bignumber" && spec.component !== "table";
 
   return (
     <div className={`rounded-xl border ${tint} bg-[#0e1220]/90 p-4 shadow-lg shadow-black/20`}>
@@ -60,24 +70,151 @@ export function ComponentRenderer({ output }: { output: RenderOutput }) {
           <h3 className="text-[15px] font-semibold leading-snug text-slate-100">{spec.title}</h3>
           {subtitle && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
         </div>
-        {output.truncated && (
-          <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
-            truncated
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {output.truncated && (
+            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
+              truncated
+            </span>
+          )}
+          <ExportMenu output={output} chartRef={chartRef} hasChart={hasChart} />
+          {canSave && <AddToDashboard specJson={JSON.stringify(spec)} />}
+        </div>
       </div>
-      <Body output={output} />
+      <Body output={output} chartRef={chartRef} />
     </div>
   );
 }
 
-function Body({ output }: { output: RenderOutput }) {
+function ExportMenu({
+  output,
+  chartRef,
+  hasChart,
+}: {
+  output: RenderOutput;
+  chartRef: RefObject<EChartHandle | null>;
+  hasChart: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const name = slugFilename(output.spec.title);
+
+  const item = (label: string, onClick: () => void) => (
+    <button
+      onClick={() => {
+        onClick();
+        setOpen(false);
+      }}
+      className="block w-full px-3 py-1.5 text-left text-xs text-slate-300 transition hover:bg-slate-800 hover:text-slate-100"
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-md border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+        title="Export this chart"
+      >
+        Export ▾
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-6 z-20 w-32 overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-xl shadow-black/40">
+            {item("CSV", () =>
+              downloadBlob(`${name}.csv`, rowsToCsv(output.rows), "text/csv")
+            )}
+            {item("JSON", () =>
+              downloadBlob(`${name}.json`, JSON.stringify(output.rows, null, 2), "application/json")
+            )}
+            {hasChart &&
+              item("PNG", () => {
+                const url = chartRef.current?.getPng();
+                if (url) downloadDataUrl(`${name}.png`, url);
+              })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AddToDashboard({ specJson }: { specJson: string }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("My dashboard");
+  const [saved, setSaved] = useState(false);
+  const [pending, start] = useTransition();
+
+  if (saved) {
+    return (
+      <span className="text-[11px] text-emerald-400">
+        ✓ saved{" "}
+        <a
+          href={`/dashboard?only=${encodeURIComponent(name)}`}
+          className="text-sky-400 hover:underline"
+        >
+          open →
+        </a>
+      </span>
+    );
+  }
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="rounded-md border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-sky-600/50 hover:text-sky-300"
+        title="Save this chart to a dashboard"
+      >
+        ＋ Dashboard
+      </button>
+    );
+  }
+  const save = () =>
+    start(async () => {
+      await addChartToDashboard(name.trim() || "My dashboard", specJson);
+      setSaved(true);
+    });
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && save()}
+        placeholder="Dashboard name"
+        className="w-32 rounded-md border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-100 outline-none focus:border-sky-500/60"
+      />
+      <button
+        disabled={pending}
+        onClick={save}
+        className="rounded-md bg-sky-600 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
+      >
+        {pending ? "…" : "Save"}
+      </button>
+      <button
+        onClick={() => setOpen(false)}
+        className="px-1 text-[11px] text-slate-500 hover:text-slate-300"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function Body({
+  output,
+  chartRef,
+}: {
+  output: RenderOutput;
+  chartRef: RefObject<EChartHandle | null>;
+}) {
   const { spec } = output;
   const { option, height } = useMemo(() => buildOption(output), [output]);
 
   if (spec.component === "bignumber") return <BigNumber output={output} />;
   if (spec.component === "table") return <DataTable rows={output.rows} />;
-  if (option) return <EChart option={option} height={height} />;
+  if (option) return <EChart ref={chartRef} option={option} height={height} />;
   return <DataTable rows={output.rows} />;
 }
 

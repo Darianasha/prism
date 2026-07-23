@@ -1,15 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "../../app/auth-actions";
 import type { SessionUser } from "@/lib/auth";
 import type { SessionRow } from "@/lib/appdb";
 
-export function Sidebar({ user, sessions }: { user: SessionUser; sessions: SessionRow[] }) {
+export function Sidebar({
+  user,
+  sessions,
+  dashboards,
+}: {
+  user: SessionUser;
+  sessions: SessionRow[];
+  dashboards: string[];
+}) {
   const router = useRouter();
+  const pathname = usePathname();
   const params = useSearchParams();
   const activeId = params.get("chat");
+  const onDashboard = pathname === "/dashboard";
+  const activeDash = onDashboard ? params.get("only") : null;
 
   const newChat = () => {
     const id = crypto.randomUUID().slice(0, 8);
@@ -31,6 +42,44 @@ export function Sidebar({ user, sessions }: { user: SessionUser; sessions: Sessi
         >
           + New chat
         </button>
+      </div>
+
+      <div className="mt-4 px-3">
+        <div className="mb-1 flex items-center justify-between px-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Dashboards
+          </span>
+          <Link
+            href="/dashboard"
+            className={`text-[11px] transition hover:text-slate-300 ${
+              onDashboard && !activeDash ? "text-sky-300" : "text-slate-500"
+            }`}
+          >
+            manage
+          </Link>
+        </div>
+        {dashboards.length === 0 ? (
+          <p className="px-1 py-1 text-[11px] text-slate-600">
+            Save a chart from chat to start one.
+          </p>
+        ) : (
+          <div className="space-y-0.5">
+            {dashboards.map((d) => (
+              <Link
+                key={d}
+                href={`/dashboard?only=${encodeURIComponent(d)}`}
+                title={`Open “${d}”`}
+                className={`block truncate rounded-lg px-3 py-1.5 text-sm transition ${
+                  activeDash === d
+                    ? "bg-slate-800 font-medium text-slate-100"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                }`}
+              >
+                ▦ {d}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       <nav className="mt-4 flex-1 space-y-0.5 overflow-y-auto px-2">

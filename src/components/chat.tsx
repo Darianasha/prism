@@ -321,7 +321,7 @@ function PartView({
 
     case "tool-render_component": {
       if (part.state === "output-available") {
-        return <ComponentRenderer output={part.output as RenderOutput} />;
+        return <ComponentRenderer output={part.output as RenderOutput} canSave />;
       }
       if (part.state === "output-error") {
         return (

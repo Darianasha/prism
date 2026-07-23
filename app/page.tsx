@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { LoginForm } from "@/components/LoginForm";
 import { getCurrentUser } from "@/lib/auth";
 import { listSessions, getTranscript } from "@/lib/appdb";
+import { listDashboardNames } from "@/lib/dashboards";
 
 export default async function Home({
   searchParams,
@@ -17,16 +18,17 @@ export default async function Home({
   const chatId = (await searchParams).chat;
   if (!chatId) redirect(`/?chat=${crypto.randomUUID().slice(0, 8)}`);
 
-  const [sessions, transcript] = await Promise.all([
+  const [sessions, transcript, dashboards] = await Promise.all([
     listSessions(user.userId),
     getTranscript(user.userId, chatId),
+    listDashboardNames(user.userId),
   ]);
   const initialMessages = transcript ? JSON.parse(transcript) : [];
 
   return (
     <div className="flex h-screen overflow-hidden">
       <Suspense>
-        <Sidebar user={user} sessions={sessions} />
+        <Sidebar user={user} sessions={sessions} dashboards={dashboards} />
       </Suspense>
       <div className="min-w-0 flex-1 overflow-y-auto">
         <Chat chatId={chatId} initialMessages={initialMessages} />

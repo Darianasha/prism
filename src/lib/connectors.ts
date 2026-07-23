@@ -1,7 +1,24 @@
-import { assertIdent, createTable, insertRows } from "./clickhouse";
+import { createTable, insertRows } from "./clickhouse";
 import type { Row } from "./spec";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { standardTableName } from "./tableNaming";
+import { recordSource, type SourceParams } from "./sources";
+
+// Recording provenance must never break a fetch (e.g. if prism_app isn't set up).
+async function safeRecordSource(r: {
+  table_name: string;
+  source_kind: "open_meteo" | "url";
+  params: SourceParams;
+  origin: string;
+  refreshable: boolean;
+}): Promise<void> {
+  try {
+    await recordSource(r);
+  } catch {
+    /* provenance is best-effort */
+  }
+}
 
 export interface IngestResult {
   table: string;
@@ -23,7 +40,9 @@ export async function fetchOpenMeteo(opts: {
 }): Promise<IngestResult> {
   const { latitude, longitude, locationName } = opts;
   const days = Math.min(Math.max(opts.days ?? 3, 1), 7);
-  const table = assertIdent(opts.table);
+  // Naming standard: weather always lands as wx_<place>, regardless of the name
+  // the model proposed (it reads the real name back from this result).
+  const table = standardTableName("open_meteo", locationName);
 
   const hourlyWeather =
     "temperature_2m,apparent_temperature,precipitation_probability,precipitation,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index";
@@ -75,12 +94,19 @@ export async function fetchOpenMeteo(opts: {
 
   await createTable(table, columns, "ts");
   await insertRows(table, rows);
+  await safeRecordSource({
+    table_name: table,
+    source_kind: "open_meteo",
+    params: { latitude, longitude, location_name: locationName, days },
+    origin: "open-meteo.com",
+    refreshable: true, // forecasts change daily — the cron re-fetches
+  });
 
   return {
     table,
     rowCount: rows.length,
     columns,
-    note: `Hourly forecast + air quality for ${locationName} (${days} days, local timezone of the location). european_aqi: <=20 good, 20-40 fair, 40-60 moderate, >60 poor.`,
+    note: `Hourly forecast + air quality for ${locationName} (${days} days, local timezone of the location), stored as table "${table}". european_aqi: <=20 good, 20-40 fair, 40-60 moderate, >60 poor.`,
   };
 }
 
@@ -96,7 +122,13 @@ export async function ingestUrl(opts: {
   url: string;
   format?: "csv" | "json" | "auto";
 }): Promise<IngestResult> {
-  const table = assertIdent(opts.table);
+  // Naming standard: external ingests land as ext_<slug> (from the model's hint
+  // or the source host). The model reads the real name back from this result.
+  let host = "";
+  try {
+    host = new URL(opts.url).hostname.replace(/^www\./, "");
+  } catch {}
+  const table = standardTableName("url", opts.table || host);
   const res = await safeFetch(opts.url);
   if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
   const text = await res.text();
@@ -127,12 +159,19 @@ export async function ingestUrl(opts: {
   const orderBy = columns.find((c) => c.type === "DateTime")?.name ?? columns[0].name;
   await createTable(table, columns, orderBy);
   await insertRows(table, rows);
+  await safeRecordSource({
+    table_name: table,
+    source_kind: "url",
+    params: { url: opts.url, format },
+    origin: host || opts.url,
+    refreshable: true, // re-ingest daily to catch updates at the source
+  });
 
   return {
     table,
     rowCount: rows.length,
     columns,
-    note: `Ingested from ${opts.url} (${format}).`,
+    note: `Ingested from ${opts.url} (${format}), stored as table "${table}".`,
   };
 }
 
