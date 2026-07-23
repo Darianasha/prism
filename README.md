@@ -145,52 +145,41 @@ Re-seed anytime with `npm run db:seed` (deterministic PRNG, same story every tim
 it: `users`, `sessions`, `transcripts`, `sources` (provenance for fetched tables), `dashboard_items`
 (saved charts). Created by `npm run db:app`.
 
-## Where ClickHouse & Trigger.dev are used
+## Trigger.dev tasks
 
-Both are load-bearing, not decorative. Every touchpoint:
+Two tasks, both in `src/trigger/` (run locally with `npm run trigger:dev`):
 
-### ClickHouse
+1. **`prism`** — the `chat.agent` (`agent.ts`). The whole conversation runs as **one durable,
+   resumable task**: it owns the tools, streams each turn, keeps per-session state (the audience/depth
+   profile in `chat.local`), and survives a mid-answer refresh.
+2. **`refresh-sources`** — a scheduled cron (`schedules.task` in `refresh.ts`, `0 5 * * *`). Once a
+   day it re-fetches every source marked refreshable so weather and live datasets stay current.
 
-Two databases on one local instance (`docker-compose.yml`).
+## What we store (and where)
 
-**`canvas`** — the warehouse the agent reads and writes:
-- **`safeSelect()`** — the read-only guard (single `SELECT`/`WITH`, `readonly=1`, row/time caps)
-  behind every query: `run_query` (agent exploration), `render_component` (the SQL for *every*
-  chart), `introspect()`, and dashboard chart re-runs (`buildItemOutput`).
-- **`introspect()`** — reads `system.columns` + `system.parts`, enumerates LowCardinality column
-  values, and caches a warehouse summary that's injected into the system prompt each turn (so the
-  model never spends a round-trip discovering the schema).
-- **Ingestion** (`createTable` + `insertRows`) — `fetch_dataset` lands Open-Meteo weather and
-  CSV/JSON URLs as `wx_*` / `ext_*` MergeTree tables.
-- **Seed** — `npm run db:seed` builds `events` / `logs` / `deploys` deterministically.
-- **ClickHouse-specific SQL** throughout: `toStartOfHour`/`toStartOfDay`/`toDayOfWeek`, `quantile`,
-  `countIf`/`avgIf`, `argMax`, `FINAL`, interval literals.
+**ClickHouse — `canvas`** (the data the agent charts):
+- `events` / `logs` / `deploys` — seeded demo data.
+- `wx_*` / `ext_*` — tables fetched at runtime (weather/air quality, or ingested CSV·JSON). Fully
+  replaced on each refresh.
 
-**`prism_app`** — app metadata, in a separate DB so the agent never sees it:
-- **`users`** (ReplacingMergeTree) — accounts, one row per user.
-- **`sessions`** (MergeTree) — per-user chat index for the sidebar; append-only, folded with
-  `argMaxIf(title)`.
-- **`transcripts`** (ReplacingMergeTree) — full UI-message snapshots per session, rehydrated on reopen.
-- **`sources`** (ReplacingMergeTree) — provenance for every fetched table (kind, params, origin,
-  refreshable, `last_refreshed_at`).
-- **`dashboard_items`** (ReplacingMergeTree) — saved charts; add/remove via an `active` flag.
-- Created by `npm run db:app`.
+**ClickHouse — `prism_app`** (app state; separate DB so the agent never introspects it):
 
-### Trigger.dev
+| Table | Columns | Purpose |
+|---|---|---|
+| `users` | `user_id, username, created_at` | one row per account |
+| `sessions` | `session_id, user_id, title, created_at, updated_at` | sidebar index of a user's chats (append-only, folded newest-title-wins) |
+| `transcripts` | `session_id, user_id, messages, updated_at` | full UI-message JSON per session, so reopening rehydrates the conversation |
+| `sources` | `table_name, source_kind, params, origin, refreshable, created_at, last_refreshed_at` | provenance + the **re-fetch recipe** for each fetched table (`params` is JSON: lat/lon/days, or url/format) — the daily cron reads this |
+| `dashboard_items` | `user_id, dashboard, item_id, table_name, title, spec, active, added_at` | saved charts; `spec` is the full render spec (incl. its SQL), re-run live each visit; `active` handles add/remove |
 
-- **`chat.agent`** (`prismAgent`, id `prism`) — the entire conversation runs as one durable,
-  resumable task; `run()` streams each turn, `onBoot` initialises state.
-- **`chat.local`** (id `profile`) — the audience/depth profile lives in durable session state
-  across turns.
-- **`chat.withUIMessage` / `InferChatUIMessageFromTools`** — end-to-end typed tools + message parts.
-- **`chat.toStreamTextOptions`** — spread into the AI SDK `streamText` call (tools, model, system).
-- **`render_component` → `toModelOutput`** — the token-cheap receipt pattern (user gets full rows,
-  the model gets a one-line summary).
-- **`chat.createStartSessionAction` + `auth.createPublicToken`** — server actions that create/resume
-  the session and mint a session-scoped, 1-hour public token for the browser transport.
-- **`useTriggerChatTransport` + `useChat`** — the frontend streaming transport; a mid-answer refresh
-  reconnects to the durable session and resumes.
-- **`schedules.task`** (id `refresh-sources`, cron `0 5 * * *`) — the daily job that re-fetches
-  refreshable sources to keep them current.
-- **`trigger.config.ts`** — project ref, `dirs: ["./src/trigger"]`, retries, max duration. Runs
-  locally via `trigger:dev`; Trigger's cloud holds session state and routes runs to your worker.
+**Trigger.dev cloud** (managed — not in our database):
+- The **durable chat session** and its message history (owned by `chat.agent`).
+- **`chat.local` `profile`** — the inferred `{audience, depth, signals}`, kept across turns.
+
+**Browser:**
+- A signed, HttpOnly **`prism_user` cookie** — `{userId, username}`, HMAC-signed with
+  `PRISM_AUTH_SECRET` (not real auth; demo identity only).
+- The **`chat` id** in the URL, so a mid-answer refresh reconnects to the same session.
+
+**`.env`** (secrets — gitignored, never stored in a DB): the LLM key, `TRIGGER_SECRET_KEY`,
+`PRISM_DEMO_PASSWORD`, `PRISM_AUTH_SECRET`.
