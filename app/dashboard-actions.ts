@@ -2,8 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
-import { addChart, addTable, removeItem } from "@/lib/dashboards";
+import { addChart, addTable, removeItem, listDashboardNames } from "@/lib/dashboards";
 import type { RenderInput } from "@/lib/spec";
+
+/** The signed-in user's existing dashboard names (for the "add to" dropdown). */
+export async function getMyDashboardNames(): Promise<string[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  return listDashboardNames(user.userId);
+}
 
 /** Save a chart straight from the chat (the rendered component's spec). */
 export async function addChartToDashboard(dashboard: string, specJson: string) {

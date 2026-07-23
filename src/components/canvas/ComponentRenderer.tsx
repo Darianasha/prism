@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type RefObject } from "react";
 import type { RenderOutput, Row } from "@/lib/spec";
 import { buildOption } from "./buildOption";
 import { EChart, type EChartHandle } from "./EChart";
 import { formatValue, SEVERITY_COLORS } from "./format";
-import { addChartToDashboard } from "../../../app/dashboard-actions";
+import { addChartToDashboard, getMyDashboardNames } from "../../../app/dashboard-actions";
 import { rowsToCsv, slugFilename, downloadBlob, downloadDataUrl } from "@/lib/export";
 
 const STATUS_TINT: Record<string, string> = {
@@ -140,18 +140,33 @@ function ExportMenu({
   );
 }
 
+const NEW_DASH = "__new__";
+
 function AddToDashboard({ specJson }: { specJson: string }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("My dashboard");
-  const [saved, setSaved] = useState(false);
+  const [names, setNames] = useState<string[] | null>(null); // existing dashboards
+  const [choice, setChoice] = useState(""); // an existing name, or NEW_DASH
+  const [newName, setNewName] = useState("");
+  const [savedTo, setSavedTo] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  if (saved) {
+  // Load the user's existing dashboards once the picker opens.
+  useEffect(() => {
+    if (!open || names !== null) return;
+    getMyDashboardNames()
+      .then((n) => {
+        setNames(n);
+        setChoice(n[0] ?? NEW_DASH);
+      })
+      .catch(() => setNames([]));
+  }, [open, names]);
+
+  if (savedTo) {
     return (
       <span className="text-[11px] text-emerald-400">
         ✓ saved{" "}
         <a
-          href={`/dashboard?only=${encodeURIComponent(name)}`}
+          href={`/dashboard?only=${encodeURIComponent(savedTo)}`}
           className="text-sky-400 hover:underline"
         >
           open →
@@ -170,23 +185,47 @@ function AddToDashboard({ specJson }: { specJson: string }) {
       </button>
     );
   }
-  const save = () =>
+
+  const hasExisting = !!names && names.length > 0;
+  const creating = choice === NEW_DASH || !hasExisting;
+  const target = creating ? newName.trim() : choice;
+
+  const save = () => {
+    if (!target) return;
     start(async () => {
-      await addChartToDashboard(name.trim() || "My dashboard", specJson);
-      setSaved(true);
+      await addChartToDashboard(target, specJson);
+      setSavedTo(target);
     });
+  };
+
   return (
     <div className="flex items-center gap-1">
-      <input
-        autoFocus
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && save()}
-        placeholder="Dashboard name"
-        className="w-32 rounded-md border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-100 outline-none focus:border-sky-500/60"
-      />
+      {hasExisting && (
+        <select
+          value={choice}
+          onChange={(e) => setChoice(e.target.value)}
+          className="max-w-[9rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-100 outline-none focus:border-sky-500/60"
+        >
+          {names!.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+          <option value={NEW_DASH}>＋ New dashboard…</option>
+        </select>
+      )}
+      {creating && (
+        <input
+          autoFocus
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()}
+          placeholder="Dashboard name"
+          className="w-28 rounded-md border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-100 outline-none focus:border-sky-500/60"
+        />
+      )}
       <button
-        disabled={pending}
+        disabled={pending || !target}
         onClick={save}
         className="rounded-md bg-sky-600 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
       >

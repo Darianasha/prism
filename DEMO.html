@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>◇ Saddle — Demo Story</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #0a0c12;
+    color: #cbd5e1;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 56px 24px 96px; }
+  .brand {
+    background: linear-gradient(90deg, #38bdf8, #a78bfa);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    font-weight: 800;
+  }
+  h1 { font-size: 34px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .motto { color: #64748b; font-size: 15px; margin: 0 0 8px; }
+  .lead { color: #94a3b8; font-size: 15px; font-style: italic; margin: 0 0 40px; }
+  hr { border: none; border-top: 1px solid #1e293b; margin: 40px 0; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: #64748b; margin: 0 0 4px; }
+  .act > h3 { font-size: 20px; color: #f1f5f9; margin: 2px 0 12px; letter-spacing: -0.01em; }
+  .act {
+    border: 1px solid #1e2a3d; border-left: 3px solid #38bdf8;
+    border-radius: 12px; background: #0e1220;
+    padding: 20px 22px; margin: 18px 0;
+  }
+  .ask { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; color: #7dd3fc;
+    background: #0b1120; border: 1px solid #1e293b; border-radius: 8px; padding: 8px 12px; display: inline-block; margin: 2px 0 12px; }
+  .ask::before { content: "ask  "; color: #475569; }
+  .stage { color: #64748b; font-style: italic; font-size: 14px; margin: 8px 0; }
+  .say {
+    border-left: 3px solid #34d399; background: rgba(52,211,153,.06);
+    padding: 10px 16px; margin: 12px 0; color: #e2e8f0; border-radius: 0 8px 8px 0;
+  }
+  .say::before { content: "SAY"; display: block; font-size: 10px; letter-spacing: .12em; color: #34d399; margin-bottom: 2px; }
+  .screen { margin: 10px 0; }
+  .screen b, .say b { color: #f8fafc; }
+  .tech {
+    font-size: 13px; color: #94a3b8; background: #0b0e17;
+    border: 1px dashed #334155; border-radius: 8px; padding: 8px 14px; margin: 12px 0 2px;
+  }
+  .tech::before { content: "⌁ under the hood — "; color: #64748b; }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+  th { color: #94a3b8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  td.beat { color: #f1f5f9; font-weight: 600; white-space: nowrap; }
+  .closer { font-size: 18px; color: #f1f5f9; line-height: 1.55; }
+  .closer .brand { font-weight: 800; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1><span class="brand">◇ Saddle</span> — Demo Story</h1>
+  <p class="motto">Mounted to success</p>
+  <p class="lead">Read the italics as stage directions, the green boxes as roughly what to say.</p>
+
+  <h2>The hook · 30 seconds</h2>
+  <div class="say">
+    Every chat agent answers the same way — a wall of text. You ask about your data and get five
+    paragraphs you have to read, trust, and re-read.<br><br>
+    Saddle refuses to do that. It answers with the <b>thing itself</b>: a chart, a verdict card, a
+    map of what actually happened — and at most one sentence. The theme was "beyond the wall of text."
+    We took it literally: the response <b>is</b> the product. Text is the garnish, not the meal.
+  </div>
+  <p class="stage">Land on the empty state: "Ask your data anything."</p>
+
+  <hr>
+
+  <h2>The through-line</h2>
+  <p>Everything rests on one rule the agent can't break: <b>it may write one verdict sentence, then
+  it must answer through rendered components — and every number on screen comes from a real query,
+  never the model's imagination.</b> When the data isn't there, it goes and gets it. Keep pulling one
+  thread: <i>how little text, how much insight.</i></p>
+
+  <section class="act">
+    <h2>Act 1</h2><h3>It doesn't just plot, it investigates</h3>
+    <span class="ask">Why did signups drop last week?</span>
+    <p class="stage">A short "querying…" chip, then a chart with a dashed marker on it.</p>
+    <p class="screen">An annotated timeseries — signups by platform, a vertical line on the
+      <b>mobile v2.4.0 deploy (Jul 13, 14:00)</b>, and one verdict line: mobile signups fell 72% right
+      after it; web untouched.</p>
+    <div class="say">Notice what it didn't do — it didn't just draw "signups over time." It formed a
+      hypothesis, segmented by platform, correlated the drop against the deploys table, and annotated
+      the cause. The insight is in the title. The proof is the chart.</div>
+    <p class="tech">the SQL rides inside the tool call, runs against ClickHouse server-side, and streams
+      straight to the UI — the model only gets a tiny receipt back, so it stays cheap.</p>
+  </section>
+
+  <section class="act">
+    <h2>Act 2</h2><h3>Root cause, not just shape</h3>
+    <span class="ask">Why was Tuesday slow?</span>
+    <p class="screen">A service×hour heatmap lighting up <b>Tuesday 13:00–13:45</b>, plus the culprit —
+      a deploy at 12:55 dropped the DB connection pool 50 → 20, cascading into checkout timeouts.</p>
+    <div class="say">Same discipline, harder question. It found the exact window, the exact cause, and
+      drew the cascade — as a picture, in seconds.</div>
+  </section>
+
+  <section class="act">
+    <h2>Act 3</h2><h3>When the warehouse can't answer, it fetches</h3>
+    <span class="ask">Should I bike tomorrow in Astana?</span>
+    <p class="stage">A "Fetching fresh data" chip flashes before the chart.</p>
+    <div class="say">There's no weather table in this warehouse. Watch — it doesn't shrug.</div>
+    <p class="screen">It pulls a live Open-Meteo forecast into ClickHouse as a table, then charts it:
+      <b>weather strips</b> — temperature, rain, wind, air quality, each on its own scale so nothing's
+      misleading — with a verdict on whether to ride.</p>
+    <div class="say">It just created a dataset that didn't exist a second ago, and answered from it
+      like it was always there.</div>
+    <p class="tech">that table is named by a standard (<code>wx_astana</code>), its origin is recorded,
+      and a daily cron keeps it fresh.</p>
+  </section>
+
+  <section class="act">
+    <h2>Act 4</h2><h3>It reaches the open web — with receipts</h3>
+    <span class="ask">Why did Spain beat Argentina?</span>
+    <p class="stage">A "Searching the web" chip, then a row of clickable source domains, then a chart.</p>
+    <div class="say">Nothing in the warehouse could touch this. So it searched the web — and here's the
+      part I love: it shows you the <b>actual sources</b> it read.</div>
+    <p class="screen">Clickable citations sit under the answer (apnews.com, fifa.com…), and the chart is
+      a clean head-to-head: shots, possession, cards.</p>
+    <div class="say">No fabrication. If it tells you a number, you can click through to where it came
+      from.</div>
+  </section>
+
+  <section class="act">
+    <h2>Act 5</h2><h3>The same truth, told to different people</h3>
+    <span class="ask">Why was Tuesday slow? I care about p99 latency per service.</span>
+    <p class="screen">The profile chip flips to <b>Engineer</b>; the answer returns in percentiles,
+      per-service, minute grain.</p>
+    <p class="stage">Now click <b>Exec</b> in the header and re-ask.</p>
+    <p class="screen">The <b>same incident</b> comes back as customer impact in plain language —
+      "checkout was degraded for 45 minutes," not "504s spiked."</p>
+    <div class="say">Same data. Different audience. It infers who it's talking to from your wording,
+      remembers it, and reshapes every answer — and you can override it with one click.</div>
+  </section>
+
+  <section class="act">
+    <h2>Act 6</h2><h3>Answers you can keep, group, and take with you</h3>
+    <p class="stage">On any chart, click <b>＋ Dashboard</b>, name it (e.g. "Ops"), hit save.</p>
+    <div class="say">Any answer can become a saved chart.</div>
+    <p class="screen">Open the dashboard from the sidebar — <i>same window, sidebar stays put</i> — and
+      the charts <b>re-run live</b>, so they're never stale.</p>
+    <p class="stage">Hit <b>Export ▾</b> on the dashboard → <b>Interactive page · HTML</b>. Open the file.</p>
+    <div class="say">A self-contained, shareable dashboard — charts and all — that opens in any browser.
+      Or export a single chart as CSV, JSON, or PNG.</div>
+  </section>
+
+  <section class="act">
+    <h2>Act 7</h2><h3>It's durable (the quiet flex)</h3>
+    <p class="stage">Ask anything, and while it's still streaming, refresh the page.</p>
+    <p class="screen">The answer <b>resumes</b> — the stream reconnects and keeps going.</p>
+    <div class="say">The whole conversation is one long-lived task in the cloud, not something living in
+      this tab. Close it, reopen it, refresh mid-answer — it's still there. Your history is saved too.</div>
+  </section>
+
+  <hr>
+
+  <h2>The tech, in one breath</h2>
+  <ul>
+    <li><b>Trigger.dev — two tasks.</b> One durable <code>chat.agent</code> runs the <i>entire</i>
+      conversation (tools, streaming, memory, resume-on-refresh). One scheduled cron re-fetches live
+      data daily so dashboards stay current.</li>
+    <li><b>ClickHouse — every number is a real query.</b> A <code>canvas</code> warehouse the agent
+      reads, writes, and ingests into; a separate <code>prism_app</code> DB for accounts, sessions,
+      saved dashboards, and data provenance.</li>
+    <li><b>Any model</b> — Anthropic, Gemini, or OpenAI — with provider-native web search on the same key.</li>
+  </ul>
+
+  <hr>
+
+  <h2>The closer</h2>
+  <p class="closer">So — that's <span class="brand">Saddle</span>. You ask a question; you get an
+    answer you can see, click, save, and share — not a paragraph you have to believe. Beyond the wall
+    of text, <b>mounted to success.</b></p>
+
+  <hr>
+
+  <h2>Cheat sheet · say these fast</h2>
+  <table>
+    <thead><tr><th>Beat</th><th>One-liner</th></tr></thead>
+    <tbody>
+      <tr><td class="beat">Signups drop</td><td>"It investigates and annotates the cause — not just a line chart."</td></tr>
+      <tr><td class="beat">Tuesday slow</td><td>"Root cause as a picture."</td></tr>
+      <tr><td class="beat">Bike in Astana</td><td>"No table? It fetches one and answers from it."</td></tr>
+      <tr><td class="beat">Spain vs Argentina</td><td>"Searches the web and shows its sources."</td></tr>
+      <tr><td class="beat">Engineer → Exec</td><td>"Same incident, reframed for the audience."</td></tr>
+      <tr><td class="beat">Dashboard + HTML</td><td>"Save it, group it, export a live dashboard."</td></tr>
+      <tr><td class="beat">Refresh mid-answer</td><td>"Durable — the conversation lives in the cloud."</td></tr>
+    </tbody>
+  </table>
+
+</div>
+</body>
+</html>
