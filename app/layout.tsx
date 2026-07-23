@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Prism — answers, not walls of text",
+  title: "Saddle — Mounted to success",
   description:
     "A chat agent whose answers are interactive visuals rendered from ClickHouse, powered by Trigger.dev.",
 };

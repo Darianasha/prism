@@ -31,7 +31,7 @@ export function Sidebar({
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-slate-800/60 bg-[#0a0c12]">
       <div className="flex items-center gap-2 px-4 py-3">
         <span className="bg-gradient-to-r from-sky-400 to-violet-400 bg-clip-text text-base font-bold text-transparent">
-          ◇ Prism
+◇ Saddle
         </span>
       </div>
 

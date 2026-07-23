@@ -92,7 +92,7 @@ export function buildDashboardHtml(name: string, cards: ExportCard[]): string {
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(name)} — Prism dashboard</title>
+<title>${esc(name)} — Saddle dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@6/dist/echarts.min.js"></script>
 <style>
   body{margin:0;background:#0a0c12;color:#e2e8f0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -114,7 +114,7 @@ export function buildDashboardHtml(name: string, cards: ExportCard[]): string {
 </style></head>
 <body><div class="wrap">
   <h1>◇ ${esc(name)}</h1>
-  <div class="meta">Exported from Prism · ${esc(new Date().toLocaleString())}</div>
+  <div class="meta">Exported from Saddle · ${esc(new Date().toLocaleString())}</div>
   ${bodies.join("\n")}
 </div>
 <script>

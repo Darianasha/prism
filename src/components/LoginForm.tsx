@@ -15,9 +15,9 @@ export function LoginForm() {
         <div className="mb-6 text-center">
           <div className="text-4xl">◇</div>
           <h1 className="mt-3 bg-gradient-to-r from-sky-400 to-violet-400 bg-clip-text text-xl font-bold text-transparent">
-            Prism
+            Saddle
           </h1>
-          <p className="mt-1 text-xs text-slate-500">answers, not walls of text</p>
+          <p className="mt-1 text-xs text-slate-500">Mounted to success</p>
         </div>
 
         <label className="block text-xs font-medium text-slate-400">Username</label>

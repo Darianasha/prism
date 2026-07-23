@@ -120,9 +120,9 @@ function ChatSession({
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-800/60 bg-[#0a0c12]/90 py-3 backdrop-blur">
         <div className="flex items-baseline gap-3">
           <h1 className="bg-gradient-to-r from-sky-400 to-violet-400 bg-clip-text text-lg font-bold text-transparent">
-            ◇ Prism
+            ◇ Saddle
           </h1>
-          <span className="text-xs text-slate-500">answers, not walls of text</span>
+          <span className="text-xs text-slate-500">Mounted to success</span>
         </div>
         <div className="flex items-center gap-3">
           <AudiencePicker
